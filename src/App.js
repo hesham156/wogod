@@ -1025,6 +1025,7 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
     else if (activeTab === 'uvdtf') {
       const h = inputs.height; const w = inputs.width; const qty = inputs.quantity; const itemsPerRow = Math.floor(50 / (w + 0.2)); const totalRows = itemsPerRow > 0 ? Math.ceil(qty / itemsPerRow) : 0; const rawLength = (totalRows * (h + 0.2)) / 100; const marginPart = Math.floor(rawLength / 0.5) * 0.05; const metersConsumed = (rawLength + marginPart) * 0.5; 
       
+      // If manual mode is on, use manualPrice (or 0 if empty). Else use system price.
       unitPrice = isCustomPriceActive ? parseFloat(customUnitPrice) : (prices.uvDtfPrice || 0);
 
       const finalPrice = (metersConsumed * unitPrice) * marginRate;
@@ -1113,26 +1114,23 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
             <div className="bg-slate-50 border-b border-slate-100 p-4 flex justify-between items-center"><h3 className="font-bold text-slate-700 flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#337159]"></span> المدخلات (بيانات العميل)</h3></div>
             <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
               
+              {/* --- Custom Unit Price Override Input --- */}
               {generalSettings?.allowPriceOverride && (
-                <div className="md:col-span-3 mb-4 bg-orange-50 p-3 rounded-lg border border-orange-200 flex items-center gap-4">
-                  <div className="flex-1">
-                    <label className="block text-xs font-bold text-orange-800 mb-1">
-                      {activeTab === 'roll' ? 'سعر المتر المربع (تعديل يدوي)' : 
-                       activeTab === 'digital' ? 'سعر الورق (تعديل يدوي)' : 
-                       activeTab === 'offset' ? 'سعر الألف ورق (تعديل يدوي)' :
-                       'سعر المتر الطولي (تعديل يدوي)'}
+                <div className="md:col-span-3 mb-4 bg-orange-50 p-4 rounded-lg border border-orange-200">
+                    <label className="block text-sm font-bold text-orange-800 mb-2">
+                      {activeTab === 'roll' ? 'سعر المتر المربع (إجباري)' : 
+                       activeTab === 'digital' ? 'سعر الورق (إجباري)' : 
+                       activeTab === 'offset' ? 'سعر الألف ورق (إجباري)' :
+                       'سعر المتر الطولي (إجباري)'} <span className="text-red-500">*</span>
                     </label>
                     <input 
                       type="number" 
                       value={customUnitPrice} 
                       onChange={(e) => setCustomUnitPrice(e.target.value)}
-                      className="w-full p-2 bg-white border border-orange-300 rounded text-center font-bold text-orange-900 outline-none focus:ring-1 focus:ring-[#fa5732]"
-                      placeholder={getSystemPriceDisplay()}
+                      className="w-full p-3 bg-white border-2 border-orange-300 rounded-lg text-center font-bold text-xl text-orange-900 outline-none focus:ring-2 focus:ring-[#fa5732] placeholder-orange-200"
+                      placeholder="أدخل السعر هنا"
+                      required
                     />
-                  </div>
-                  <div className="text-xs text-orange-600 max-w-[200px] leading-tight">
-                    * يمكنك إدخال سعر خاص لهذه العملية فقط. اترك الحقل فارغاً لاستخدام السعر الرسمي ({getSystemPriceDisplay()}).
-                  </div>
                 </div>
               )}
 
