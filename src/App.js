@@ -1176,7 +1176,7 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
                                     <input type="number" name="width" value={foilInputs.width || ''} onChange={handleFoilInput} className="w-full p-2 text-sm border rounded text-center outline-none focus:border-[#fa5732]" placeholder="0" />
                                 </div>
                                 <div>
-                                    <label className="text-[10px] text-slate-500">ارتفاع البصمة (سم)</label>
+                                    <label className="text-[10px] text-slate-500">طول البصمة (سم)</label>
                                     <input type="number" name="height" value={foilInputs.height || ''} onChange={handleFoilInput} className="w-full p-2 text-sm border rounded text-center outline-none focus:border-[#fa5732]" placeholder="0" />
                                 </div>
                             </div>
@@ -1237,7 +1237,7 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
               )}
 
               <div><label className="block text-sm font-bold text-slate-600 mb-2">العرض (سم)</label><input type="number" name="width" value={inputs.width || ''} onChange={handleInput} className="w-full p-3 bg-[#337159]/5 border border-[#b99ecb] rounded-xl focus:ring-2 focus:ring-[#337159] outline-none text-center font-bold text-lg" placeholder="0"/></div>
-              <div><label className="block text-sm font-bold text-slate-600 mb-2">الارتفاع (سم)</label><input type="number" name="height" value={inputs.height || ''} onChange={handleInput} className="w-full p-3 bg-[#337159]/5 border border-[#b99ecb] rounded-xl focus:ring-2 focus:ring-[#337159] outline-none text-center font-bold text-lg" placeholder="0"/></div>
+              <div><label className="block text-sm font-bold text-slate-600 mb-2">الطول (سم)</label><input type="number" name="height" value={inputs.height || ''} onChange={handleInput} className="w-full p-3 bg-[#337159]/5 border border-[#b99ecb] rounded-xl focus:ring-2 focus:ring-[#337159] outline-none text-center font-bold text-lg" placeholder="0"/></div>
               <div><label className="block text-sm font-bold text-slate-600 mb-2">العدد المطلوب</label><input type="number" name="quantity" value={inputs.quantity || ''} onChange={handleInput} className="w-full p-3 bg-[#337159]/5 border border-[#b99ecb] rounded-xl focus:ring-2 focus:ring-[#337159] outline-none text-center font-bold text-lg" placeholder="0"/></div>
               {activeTab === 'roll' && (<div><label className="block text-sm font-bold text-slate-600 mb-2">عرض الرول (سم)</label><input type="number" name="rollWidth" value={inputs.rollWidth || ''} onChange={handleInput} className="w-full p-3 bg-[#337159]/5 border border-[#b99ecb] rounded-xl focus:ring-2 focus:ring-[#337159] outline-none text-center font-bold text-lg"/></div>)}
             </div>
