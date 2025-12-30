@@ -1,4 +1,3 @@
-import './index.css'
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -16,7 +15,7 @@ import {
   collection,
   arrayUnion
 } from 'firebase/firestore';
-import { LogOut, Lock, Save, Palette, Scroll, Layout, Trash2, Plus, Maximize, User, Mail, Key, Users, UserPlus, Database, FileJson, Layers, Percent, History, FileText, ArrowRight, ToggleLeft, ToggleRight, Sliders, Eye, EyeOff, Stamp, Factory, Ban, Info, Sparkles } from 'lucide-react';
+import { LogOut, Lock, Save, Palette, Scroll, Layout, Trash2, Plus, Maximize, User, Mail, Key, Users, UserPlus, Database, FileJson, Layers, Percent, History, FileText, ArrowRight, ToggleLeft, ToggleRight, Sliders, Eye, EyeOff, Stamp, Factory, Ban, Info, Sparkles, AlertTriangle } from 'lucide-react';
 
 // --- Firebase Setup ---
 const firebaseConfig = {
@@ -905,6 +904,12 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
       const isRotatedBest = count2 > count1;
       const sheetsNeeded = perSheet > 0 ? Math.ceil(qty / perSheet) : 0; 
       
+      // ERROR CHECK: If perSheet is 0 (doesn't fit) but dimensions were entered
+      let error = null;
+      if (stickerW > 0 && stickerH > 0 && perSheet === 0) {
+          error = `عفواً، مقاس التصميم (${stickerW}×${stickerH}) أكبر من مقاس الورق المختار (${sheetW}×${sheetH}) مع الهوامش. يرجى اختيار ورق أكبر أو تقليل المقاس.`;
+      }
+
       const basePrice = sheetsNeeded * unitPrice;
       const totalAddonsPrice = sheetsNeeded * addonsCostPerSheet;
       
@@ -976,7 +981,7 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
       return { 
           perSheet, sheetsNeeded, pricePreTax, tax, finalPrice, sheetPriceUsed: unitPrice, addonsCostPerSheet, totalAddonsPrice, 
           dims: `${sheetW}×${sheetH}`, discountPercent, discountAmount, priceAfterDiscount, details,
-          foilCost, moldPrice, stampingCost, savingsMessage, spotUvCost
+          foilCost, moldPrice, stampingCost, savingsMessage, spotUvCost, error
       };
     }
     else if (activeTab === 'offset') {
@@ -1240,6 +1245,14 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
               <div><label className="block text-sm font-bold text-slate-600 mb-2">الطول (سم)</label><input type="number" name="height" value={inputs.height || ''} onChange={handleInput} className="w-full p-3 bg-[#337159]/5 border border-[#b99ecb] rounded-xl focus:ring-2 focus:ring-[#337159] outline-none text-center font-bold text-lg" placeholder="0"/></div>
               <div><label className="block text-sm font-bold text-slate-600 mb-2">العدد المطلوب</label><input type="number" name="quantity" value={inputs.quantity || ''} onChange={handleInput} className="w-full p-3 bg-[#337159]/5 border border-[#b99ecb] rounded-xl focus:ring-2 focus:ring-[#337159] outline-none text-center font-bold text-lg" placeholder="0"/></div>
               {activeTab === 'roll' && (<div><label className="block text-sm font-bold text-slate-600 mb-2">عرض الرول (سم)</label><input type="number" name="rollWidth" value={inputs.rollWidth || ''} onChange={handleInput} className="w-full p-3 bg-[#337159]/5 border border-[#b99ecb] rounded-xl focus:ring-2 focus:ring-[#337159] outline-none text-center font-bold text-lg"/></div>)}
+
+              {/* Error Message Moved Here */}
+              {results.error && (
+                <div className="md:col-span-3 bg-red-50 border border-red-200 text-red-800 p-3 rounded-lg text-xs font-bold flex items-center gap-2 mt-2 animate-in fade-in slide-in-from-top-2">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                    {results.error}
+                </div>
+              )}
             </div>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -1277,9 +1290,9 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
                       </div>
                   )}
 
-                  {results.savingsMessage && (
+                  {results.savingsMessage && !results.error && (
                     <div className="col-span-2 md:col-span-3 bg-[#337159]/10 border border-[#337159] text-[#337159] p-3 rounded-lg text-xs font-bold flex items-center gap-2 mt-2">
-                        <Info className="w-4 h-4" />
+                        <Info className="w-4 h-4 flex-shrink-0" />
                         {results.savingsMessage}
                     </div>
                   )}
@@ -1344,11 +1357,6 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
 };
 
 export default function App() {
-  return <AppContent />;
-}
-
-// Renaming the main component to avoid export conflict with function name
-function AppContent() {
   const [view, setView] = useState('calculator'); // 'calculator', 'login', 'admin'
   const [adminUser, setAdminUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1446,7 +1454,6 @@ function AppContent() {
     try {
       const generalRef = doc(db, ...GENERAL_SETTINGS_PATH);
       await updateDoc(generalRef, newSettings);
-      // alert('تم تحديث الإعدادات العامة بنجاح'); // Optional feedback
     } catch (error) {
       console.error("Error updating general settings:", error);
     }
