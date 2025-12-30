@@ -806,6 +806,7 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
   const [isSpotUvEnabled, setIsSpotUvEnabled] = useState(false);
   const [savingLog, setSavingLog] = useState(false);
 
+  // Set initial active tab based on visibility settings
   useEffect(() => {
     if (!activeTab) {
         if (generalSettings?.showRoll !== false) setActiveTab('roll');
@@ -815,6 +816,7 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
     }
   }, [generalSettings, activeTab]);
 
+  // Filter active papers
   const activePapers = useMemo(() => {
     return prices.digitalPaperTypes?.filter(p => p.active !== false) || [];
   }, [prices.digitalPaperTypes]);
@@ -823,6 +825,7 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
     return prices.offsetPaperTypes?.filter(p => p.active !== false) || [];
   }, [prices.offsetPaperTypes]);
 
+  // Adjust selected index if list changes
   useEffect(() => {
     if (activeTab === 'digital') {
         if (selectedPaperIndex >= activePapers.length && activePapers.length > 0) {
@@ -832,16 +835,16 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
   }, [activePapers.length, activeTab]);
 
   useEffect(() => { setInputs(prev => ({...prev, rollWidth: prices.defaultRollWidth || 100})); }, [prices.defaultRollWidth]);
-  
   const handleInput = (e) => { const { name, value } = e.target; setInputs(prev => ({ ...prev, [name]: parseFloat(value) || 0 })); };
   const handleFoilInput = (e) => { const { name, value } = e.target; setFoilInputs(prev => ({ ...prev, [name]: parseFloat(value) || 0 })); };
   const handleFaceChange = (e) => { setInputs(prev => ({ ...prev, offsetFaces: e.target.value })); };
 
+
   useEffect(() => {
     setCustomUnitPrice('');
-    setIsFoilEnabled(false); 
-    setIsSpotUvEnabled(false); 
-    setFoilInputs({ width: 0, height: 0 }); 
+    setIsFoilEnabled(false); // Reset foil toggle on tab change
+    setIsSpotUvEnabled(false); // Reset Spot UV
+    setFoilInputs({ width: 0, height: 0 }); // Reset Foil dims
   }, [activeTab, selectedPaperIndex]);
 
   const toggleAddon = (index) => {
@@ -860,14 +863,30 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
   const results = useMemo(() => {
     let unitPrice = 0;
     const isCustomPriceActive = generalSettings?.allowPriceOverride && customUnitPrice !== '' && !isNaN(parseFloat(customUnitPrice));
+    
+    // Check if manual price override is enabled and enforce input
+    if (generalSettings?.allowPriceOverride) {
+        if (!customUnitPrice || isNaN(parseFloat(customUnitPrice))) {
+            return { missingPrice: true }; // Changed from returning empty object
+        }
+    }
+    
+    // Configurable Tax & Margin
     const taxRate = (generalSettings?.taxRate ?? 15) / 100;
     const marginRate = 1 + ((generalSettings?.profitMargin ?? 15) / 100);
 
+    const manualPrice = parseFloat(customUnitPrice);
+    const isManualMode = generalSettings?.allowPriceOverride;
+
     if (activeTab === 'roll') {
       const stickerW = inputs.width; const stickerH = inputs.height; const qty = inputs.quantity; const rollW = inputs.rollWidth;
-      unitPrice = isCustomPriceActive ? parseFloat(customUnitPrice) : (prices.rollUnitPrice || 0);
+      
+      unitPrice = isManualMode ? manualPrice : (prices.rollUnitPrice || 0);
+
       const stickersPerRow = Math.floor(rollW / (stickerW + 0.2)); const rowsNeeded = stickersPerRow > 0 ? Math.ceil(qty / stickersPerRow) : 0; const baseLengthMeters = (rowsNeeded * (stickerH + 0.2)) / 100; const marginCount = Math.floor(baseLengthMeters / 0.5); const finalLength = baseLengthMeters + (marginCount * 0.05); const area = finalLength * (rollW / 100); 
+      
       let finalPrice = area * unitPrice * marginRate; 
+      
       const discountPercent = getDiscountPercent(area, prices.rollDiscounts);
       const discountAmount = finalPrice * (discountPercent / 100);
       const priceAfterDiscount = finalPrice - discountAmount;
@@ -880,13 +899,15 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
       
       let systemSheetPrice = 0;
       let paperName = 'ورق';
+      
       if (activePapers.length > 0 && activePapers[selectedPaperIndex]) { 
         systemSheetPrice = activePapers[selectedPaperIndex].price; 
         paperName = activePapers[selectedPaperIndex].name;
       } else { 
         systemSheetPrice = prices.digitalSheetPrice || 0; 
       }
-      unitPrice = isCustomPriceActive ? parseFloat(customUnitPrice) : systemSheetPrice;
+
+      unitPrice = isManualMode ? manualPrice : systemSheetPrice;
       
       let addonsCostPerSheet = 0;
       if (prices.digitalAddons) {
@@ -897,22 +918,28 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
         });
       }
       
+      // -- UPDATED LOGIC: Calculate best fit (rotate if necessary) --
       const margin = 0.2;
+      // Option 1: No rotation (Width on Width, Height on Height)
       const count1 = Math.floor(sheetW / (stickerW + margin)) * Math.floor(sheetH / (stickerH + margin));
+      // Option 2: Rotated 90 degrees (Width on Height, Height on Width)
       const count2 = Math.floor(sheetW / (stickerH + margin)) * Math.floor(sheetH / (stickerW + margin));
+      
       const perSheet = Math.max(count1, count2);
       const isRotatedBest = count2 > count1;
+
       const sheetsNeeded = perSheet > 0 ? Math.ceil(qty / perSheet) : 0; 
       
-      // ERROR CHECK: If perSheet is 0 (doesn't fit) but dimensions were entered
+      // Check if design is larger than sheet
       let error = null;
       if (stickerW > 0 && stickerH > 0 && perSheet === 0) {
           error = `عفواً، مقاس التصميم (${stickerW}×${stickerH}) أكبر من مقاس الورق المختار (${sheetW}×${sheetH}) مع الهوامش. يرجى اختيار ورق أكبر أو تقليل المقاس.`;
       }
-
+      
       const basePrice = sheetsNeeded * unitPrice;
       const totalAddonsPrice = sheetsNeeded * addonsCostPerSheet;
       
+      // Foil Calculations
       let foilCost = 0;
       let moldPrice = 0;
       let stampingCost = 0;
@@ -929,7 +956,8 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
           stampingCost = qty * (prices.foilStampingUnitPrice || 0.40);
           foilCost = moldPrice + stampingCost;
       }
-
+      
+      // Spot UV Calculation
       let spotUvCost = 0;
       if (isSpotUvEnabled && sheetsNeeded > 0) {
           if (sheetsNeeded <= 30) {
@@ -949,6 +977,7 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
       const discountAmount = finalPrice * (discountPercent / 100);
       const priceAfterDiscount = finalPrice - discountAmount;
       
+      // --- Calculate Savings Logic ---
       let savingsMessage = null;
       if (count1 !== count2 && perSheet > 0) {
           const worstCount = Math.min(count1, count2);
@@ -987,18 +1016,24 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
     else if (activeTab === 'offset') {
         const itemW = inputs.width; const itemH = inputs.height; const qty = inputs.quantity;
         const faces = inputs.offsetFaces === '2' ? 2 : 1;
+        // Assume 70x100 sheet
         const sheetW = 100; const sheetH = 70;
         
+        // Simple UPS calculation
         const ups = Math.floor(sheetW / (itemW + 0.4)) * Math.floor(sheetH / (itemH + 0.4));
         const sheetsNeeded = ups > 0 ? Math.ceil(qty / ups) : 0;
-        const totalSheetsIncludingWaste = Math.ceil(sheetsNeeded * 1.05);
+        const totalSheetsIncludingWaste = Math.ceil(sheetsNeeded * 1.05); // 5% waste
 
-        const numPlates = faces === 2 ? 8 : 4; 
+        // Costs
+        const numPlates = faces === 2 ? 8 : 4; // 4 colors CMYK assumed
         const plateCost = numPlates * (prices.offsetPlatePrice || 50);
         
+        // Print Cost
         const printRunCost = (totalSheetsIncludingWaste / 1000) * (prices.offsetPrintPrice1000 || 80);
-        const actualPrintCost = Math.max(printRunCost, (prices.offsetMinQty || 0) / 2); 
+        const actualPrintCost = Math.max(printRunCost, (prices.offsetMinQty || 0) / 2); // Split min qty logic? Let's just assume Print Price applies directly but check logic. 
+        // Actually usually min qty applies to the total process, but let's just stick to unit prices for now.
         
+        // Paper Cost
         let paperPricePer1000 = 0;
         let paperName = 'ورق أوفست';
         if (activeOffsetPapers.length > 0 && activeOffsetPapers[selectedOffsetPaperIndex]) {
@@ -1006,8 +1041,9 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
             paperName = activeOffsetPapers[selectedOffsetPaperIndex].name;
         }
         
-        if (isCustomPriceActive) {
-            paperPricePer1000 = parseFloat(customUnitPrice);
+        // Override
+        if (isManualMode) {
+            paperPricePer1000 = manualPrice;
         }
 
         const paperCost = (totalSheetsIncludingWaste / 1000) * paperPricePer1000;
@@ -1015,6 +1051,7 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
         const subTotal = plateCost + actualPrintCost + paperCost;
         const total = subTotal * marginRate; 
         
+        // Removed double margin: const finalPrice = total * 1.20; 
         const finalPrice = total; 
 
         const discountPercent = getDiscountPercent(sheetsNeeded, prices.offsetDiscounts);
@@ -1031,7 +1068,7 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
       const h = inputs.height; const w = inputs.width; const qty = inputs.quantity; const itemsPerRow = Math.floor(50 / (w + 0.2)); const totalRows = itemsPerRow > 0 ? Math.ceil(qty / itemsPerRow) : 0; const rawLength = (totalRows * (h + 0.2)) / 100; const marginPart = Math.floor(rawLength / 0.5) * 0.05; const metersConsumed = (rawLength + marginPart) * 0.5; 
       
       // If manual mode is on, use manualPrice (or 0 if empty). Else use system price.
-      unitPrice = isCustomPriceActive ? parseFloat(customUnitPrice) : (prices.uvDtfPrice || 0);
+      unitPrice = isManualMode ? manualPrice : (prices.uvDtfPrice || 0);
 
       const finalPrice = (metersConsumed * unitPrice) * marginRate;
       const discountPercent = getDiscountPercent(metersConsumed, prices.uvDtfDiscounts);
@@ -1258,95 +1295,109 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="bg-slate-50 border-b border-slate-100 p-4"><h3 className="font-bold text-slate-700 flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#fa5732]"></span> المخرجات (التكلفة)</h3></div>
             <div className="p-6">
-              {activeTab === 'roll' && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <ResultBox label="العدد في الصف" value={results.stickersPerRow} /><ResultBox label="عدد الصفوف" value={results.rowsNeeded} /><ResultBox label="الطول الأساسي (م)" value={results.baseLengthMeters?.toFixed(2)} /><ResultBox label="عدد الهوامش" value={results.marginCount} /><ResultBox label="الطول النهائي (م)" value={results.finalLength?.toFixed(2)} highlighted /><ResultBox label="المساحة (م²)" value={results.area?.toFixed(2)} />
-                  <div className="col-span-2 md:col-span-4 mt-4 bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
-                    <div className="flex justify-between items-center text-slate-500"><span>السعر الأساسي:</span><span>{Math.round(results.finalPrice || 0)} ريال</span></div>
-                    {results.discountPercent > 0 && (<div className="flex justify-between items-center text-[#337159]"><span>خصم الكمية ({results.discountPercent}%):</span><span>-{Math.round(results.discountAmount)} ريال</span></div>)}
-                    <div className="border-t border-slate-200 pt-2 flex justify-between items-center"><span className="font-bold text-[#337159] text-lg">السعر النهائي (بعد الخصم):</span><span className="font-black text-3xl text-[#fa5732]">{Math.round(results.priceAfterDiscount || 0)} <span className="text-sm font-medium">ريال</span></span></div>
-                  </div>
-                </div>
-              )}
-              {activeTab === 'digital' && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <ResultBox label="العدد في الورق" value={results.perSheet} /><ResultBox label="عدد الورق المطلوب" value={results.sheetsNeeded} highlighted /><ResultBox label="أبعاد الورق" value={results.dims} />
-                  <ResultBox label="سعر الورق (للورقة)" value={results.sheetPriceUsed} />
-                  {results.addonsCostPerSheet > 0 && <ResultBox label="سعر الإضافات (للورق)" value={results.addonsCostPerSheet} />}
-                  
-                  {isFoilEnabled && (
-                    <div className="col-span-2 md:col-span-3 bg-[#b99ecb]/10 p-3 rounded-lg border border-[#b99ecb] grid grid-cols-2 gap-2 mt-2">
-                        <div className="col-span-2 font-bold text-[#337159] text-xs mb-1">تفاصيل البصمة ({foilInputs.width || inputs.width}x{foilInputs.height || inputs.height}):</div>
-                        <div className="text-xs flex justify-between"><span>سعر القالب:</span> <span className="font-bold">{results.moldPrice?.toFixed(1)} ريال</span></div>
-                        <div className="text-xs flex justify-between"><span>تكلفة التبصيم:</span> <span className="font-bold">{results.stampingCost?.toFixed(1)} ريال</span></div>
-                        <div className="text-xs flex justify-between border-t border-[#b99ecb] pt-1 col-span-2 text-[#337159]"><span>إجمالي البصمة:</span> <span className="font-bold">{results.foilCost?.toFixed(1)} ريال</span></div>
-                    </div>
-                  )}
-
-                  {isSpotUvEnabled && (
-                      <div className="col-span-2 md:col-span-3 bg-[#b99ecb]/10 p-3 rounded-lg border border-[#b99ecb] flex justify-between items-center mt-2">
-                          <div className="text-xs font-bold text-[#337159]">تكلفة سبوت يو في ({results.sheetsNeeded} شيت):</div>
-                          <div className="font-bold text-[#fa5732]">{results.spotUvCost} ريال</div>
-                      </div>
-                  )}
-
-                  {results.savingsMessage && !results.error && (
-                    <div className="col-span-2 md:col-span-3 bg-[#337159]/10 border border-[#337159] text-[#337159] p-3 rounded-lg text-xs font-bold flex items-center gap-2 mt-2">
-                        <Info className="w-4 h-4 flex-shrink-0" />
-                        {results.savingsMessage}
-                    </div>
-                  )}
-
-                  <ResultBox label="السعر قبل الضريبة" value={results.pricePreTax?.toFixed(2)} /><ResultBox label={`قيمة الضريبة (${generalSettings?.taxRate ?? 15}%)`} value={results.tax?.toFixed(2)} />
-                  <div className="col-span-2 md:col-span-3 mt-4 bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
-                    <div className="flex justify-between items-center text-slate-500"><span>السعر الأساسي:</span><span>{Math.round(results.finalPrice || 0)} ريال</span></div>
-                    {results.discountPercent > 0 && (<div className="flex justify-between items-center text-[#337159]"><span>خصم الكمية ({results.discountPercent}%):</span><span>-{Math.round(results.discountAmount)} ريال</span></div>)}
-                    <div className="border-t border-slate-200 pt-2 flex justify-between items-center"><span className="font-bold text-[#337159] text-lg">السعر النهائي (بعد الخصم):</span><span className="font-black text-3xl text-[#fa5732]">{Math.round(results.priceAfterDiscount || 0)} <span className="text-sm font-medium">ريال</span></span></div>
-                  </div>
-                </div>
-              )}
-              {activeTab === 'offset' && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <ResultBox label="عدد التكرار (UPS)" value={results.ups} />
-                  <ResultBox label="ورق الطباعة" value={results.totalSheetsIncludingWaste} highlighted />
-                  <ResultBox label="عدد الزنكات" value={results.numPlates} />
-                  
-                  <div className="col-span-2 md:col-span-3 bg-[#337159]/5 p-3 rounded-lg border border-[#337159]/20 mt-2">
-                     <div className="text-xs font-bold text-[#337159] mb-2 border-b border-[#337159]/10 pb-1">تفاصيل التكلفة:</div>
-                     <div className="flex justify-between text-xs mb-1"><span>تكلفة الزنكات:</span> <b>{Math.round(results.plateCost)} ريال</b></div>
-                     <div className="flex justify-between text-xs mb-1"><span>تكلفة الورق ({results.paperPriceUsed}/ألف):</span> <b>{Math.round(results.paperCost)} ريال</b></div>
-                     <div className="flex justify-between text-xs"><span>تكلفة التشغيل:</span> <b>{Math.round(results.actualPrintCost)} ريال</b></div>
-                  </div>
-
-                  <div className="col-span-2 md:col-span-3 mt-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
-                    <div className="flex justify-between items-center text-slate-500"><span>السعر الأساسي:</span><span>{Math.round(results.finalPrice || 0)} ريال</span></div>
-                    {results.discountPercent > 0 && (<div className="flex justify-between items-center text-[#337159]"><span>خصم الكمية ({results.discountPercent}%):</span><span>-{Math.round(results.discountAmount)} ريال</span></div>)}
-                    <div className="border-t border-slate-200 pt-2 flex justify-between items-center"><span className="font-bold text-[#337159] text-lg">السعر النهائي (شامل الهامش):</span><span className="font-black text-3xl text-[#fa5732]">{Math.round(results.priceAfterDiscount || 0)} <span className="text-sm font-medium">ريال</span></span></div>
-                  </div>
-                </div>
-              )}
-              {activeTab === 'uvdtf' && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <ResultBox label="عدد في الصف" value={results.itemsPerRow} /><ResultBox label="عدد الصفوف" value={results.totalRows} /><ResultBox label="الأمتار المستهلكة" value={results.metersConsumed?.toFixed(3)} highlighted />
-                  <div className="col-span-2 md:col-span-3 mt-4 bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
-                    <div className="flex justify-between items-center text-slate-500"><span>السعر الأساسي:</span><span>{Math.round(results.finalPrice || 0)} ريال</span></div>
-                    {results.discountPercent > 0 && (<div className="flex justify-between items-center text-[#337159]"><span>خصم الكمية ({results.discountPercent}%):</span><span>-{Math.round(results.discountAmount)} ريال</span></div>)}
-                    <div className="border-t border-slate-200 pt-2 flex justify-between items-center"><span className="font-bold text-[#337159] text-lg">السعر النهائي (بعد الخصم):</span><span className="font-black text-3xl text-[#fa5732]">{Math.round(results.priceAfterDiscount || 0)} <span className="text-sm font-medium">ريال</span></span></div>
-                  </div>
-                </div>
-              )}
               
-              {/* Save Button */}
-              <div className="mt-6 flex justify-end col-span-full">
-                <button 
-                  onClick={handleSaveQuote} 
-                  disabled={savingLog || !results.finalPrice}
-                  className="bg-[#fa5732] hover:bg-[#d94a29] text-white py-3 px-8 rounded-xl font-bold shadow-lg flex items-center gap-2 disabled:opacity-50 transition-all hover:scale-105 active:scale-95"
-                >
-                  <FileText className="w-5 h-5" />
-                  {savingLog ? 'جاري الحفظ...' : 'حفظ التسعيرة'}
-                </button>
-              </div>
+              {/* Alert for Missing Price */}
+              {results.missingPrice ? (
+                 <div className="flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-300">
+                    <div className="bg-orange-100 p-4 rounded-full mb-3">
+                        <AlertTriangle className="w-8 h-8 text-orange-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-700 mb-1">يرجى إدخال السعر أولاً</h3>
+                    <p className="text-slate-500 text-sm">نظام التسعير اليدوي مفعل. لا يمكن حساب التكلفة بدون إدخال سعر الوحدة.</p>
+                 </div>
+              ) : (
+                <>
+                  {activeTab === 'roll' && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <ResultBox label="العدد في الصف" value={results.stickersPerRow} /><ResultBox label="عدد الصفوف" value={results.rowsNeeded} /><ResultBox label="الطول الأساسي (م)" value={results.baseLengthMeters?.toFixed(2)} /><ResultBox label="عدد الهوامش" value={results.marginCount} /><ResultBox label="الطول النهائي (م)" value={results.finalLength?.toFixed(2)} highlighted /><ResultBox label="المساحة (م²)" value={results.area?.toFixed(2)} />
+                      <div className="col-span-2 md:col-span-4 mt-4 bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
+                        <div className="flex justify-between items-center text-slate-500"><span>السعر الأساسي:</span><span>{Math.round(results.finalPrice || 0)} ريال</span></div>
+                        {results.discountPercent > 0 && (<div className="flex justify-between items-center text-[#337159]"><span>خصم الكمية ({results.discountPercent}%):</span><span>-{Math.round(results.discountAmount)} ريال</span></div>)}
+                        <div className="border-t border-slate-200 pt-2 flex justify-between items-center"><span className="font-bold text-[#337159] text-lg">السعر النهائي (بعد الخصم):</span><span className="font-black text-3xl text-[#fa5732]">{Math.round(results.priceAfterDiscount || 0)} <span className="text-sm font-medium">ريال</span></span></div>
+                      </div>
+                    </div>
+                  )}
+                  {activeTab === 'digital' && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <ResultBox label="العدد في الورق" value={results.perSheet} /><ResultBox label="عدد الورق المطلوب" value={results.sheetsNeeded} highlighted /><ResultBox label="أبعاد الورق" value={results.dims} />
+                      <ResultBox label="سعر الورق (للورقة)" value={results.sheetPriceUsed} />
+                      {results.addonsCostPerSheet > 0 && <ResultBox label="سعر الإضافات (للورق)" value={results.addonsCostPerSheet} />}
+                      
+                      {isFoilEnabled && (
+                        <div className="col-span-2 md:col-span-3 bg-[#b99ecb]/10 p-3 rounded-lg border border-[#b99ecb] grid grid-cols-2 gap-2 mt-2">
+                            <div className="col-span-2 font-bold text-[#337159] text-xs mb-1">تفاصيل البصمة ({foilInputs.width || inputs.width}x{foilInputs.height || inputs.height}):</div>
+                            <div className="text-xs flex justify-between"><span>سعر القالب:</span> <span className="font-bold">{results.moldPrice?.toFixed(1)} ريال</span></div>
+                            <div className="text-xs flex justify-between"><span>تكلفة التبصيم:</span> <span className="font-bold">{results.stampingCost?.toFixed(1)} ريال</span></div>
+                            <div className="text-xs flex justify-between border-t border-[#b99ecb] pt-1 col-span-2 text-[#337159]"><span>إجمالي البصمة:</span> <span className="font-bold">{results.foilCost?.toFixed(1)} ريال</span></div>
+                        </div>
+                      )}
+
+                      {isSpotUvEnabled && (
+                          <div className="col-span-2 md:col-span-3 bg-[#b99ecb]/10 p-3 rounded-lg border border-[#b99ecb] flex justify-between items-center mt-2">
+                              <div className="text-xs font-bold text-[#337159]">تكلفة سبوت يو في ({results.sheetsNeeded} شيت):</div>
+                              <div className="font-bold text-[#fa5732]">{results.spotUvCost} ريال</div>
+                          </div>
+                      )}
+
+                      {results.savingsMessage && !results.error && (
+                        <div className="col-span-2 md:col-span-3 bg-[#337159]/10 border border-[#337159] text-[#337159] p-3 rounded-lg text-xs font-bold flex items-center gap-2 mt-2">
+                            <Info className="w-4 h-4 flex-shrink-0" />
+                            {results.savingsMessage}
+                        </div>
+                      )}
+
+                      <ResultBox label="السعر قبل الضريبة" value={results.pricePreTax?.toFixed(2)} /><ResultBox label={`قيمة الضريبة (${generalSettings?.taxRate ?? 15}%)`} value={results.tax?.toFixed(2)} />
+                      <div className="col-span-2 md:col-span-3 mt-4 bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
+                        <div className="flex justify-between items-center text-slate-500"><span>السعر الأساسي:</span><span>{Math.round(results.finalPrice || 0)} ريال</span></div>
+                        {results.discountPercent > 0 && (<div className="flex justify-between items-center text-[#337159]"><span>خصم الكمية ({results.discountPercent}%):</span><span>-{Math.round(results.discountAmount)} ريال</span></div>)}
+                        <div className="border-t border-slate-200 pt-2 flex justify-between items-center"><span className="font-bold text-[#337159] text-lg">السعر النهائي (بعد الخصم):</span><span className="font-black text-3xl text-[#fa5732]">{Math.round(results.priceAfterDiscount || 0)} <span className="text-sm font-medium">ريال</span></span></div>
+                      </div>
+                    </div>
+                  )}
+                  {activeTab === 'offset' && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <ResultBox label="عدد التكرار (UPS)" value={results.ups} />
+                      <ResultBox label="ورق الطباعة" value={results.totalSheetsIncludingWaste} highlighted />
+                      <ResultBox label="عدد الزنكات" value={results.numPlates} />
+                      
+                      <div className="col-span-2 md:col-span-3 bg-[#337159]/5 p-3 rounded-lg border border-[#337159]/20 mt-2">
+                        <div className="text-xs font-bold text-[#337159] mb-2 border-b border-[#337159]/10 pb-1">تفاصيل التكلفة:</div>
+                        <div className="flex justify-between text-xs mb-1"><span>تكلفة الزنكات:</span> <b>{Math.round(results.plateCost)} ريال</b></div>
+                        <div className="flex justify-between text-xs mb-1"><span>تكلفة الورق ({results.paperPriceUsed}/ألف):</span> <b>{Math.round(results.paperCost)} ريال</b></div>
+                        <div className="flex justify-between text-xs"><span>تكلفة التشغيل:</span> <b>{Math.round(results.actualPrintCost)} ريال</b></div>
+                      </div>
+
+                      <div className="col-span-2 md:col-span-3 mt-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
+                        <div className="flex justify-between items-center text-slate-500"><span>السعر الأساسي:</span><span>{Math.round(results.finalPrice || 0)} ريال</span></div>
+                        {results.discountPercent > 0 && (<div className="flex justify-between items-center text-[#337159]"><span>خصم الكمية ({results.discountPercent}%):</span><span>-{Math.round(results.discountAmount)} ريال</span></div>)}
+                        <div className="border-t border-slate-200 pt-2 flex justify-between items-center"><span className="font-bold text-[#337159] text-lg">السعر النهائي (شامل الهامش):</span><span className="font-black text-3xl text-[#fa5732]">{Math.round(results.priceAfterDiscount || 0)} <span className="text-sm font-medium">ريال</span></span></div>
+                      </div>
+                    </div>
+                  )}
+                  {activeTab === 'uvdtf' && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <ResultBox label="عدد في الصف" value={results.itemsPerRow} /><ResultBox label="عدد الصفوف" value={results.totalRows} /><ResultBox label="الأمتار المستهلكة" value={results.metersConsumed?.toFixed(3)} highlighted />
+                      <div className="col-span-2 md:col-span-3 mt-4 bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
+                        <div className="flex justify-between items-center text-slate-500"><span>السعر الأساسي:</span><span>{Math.round(results.finalPrice || 0)} ريال</span></div>
+                        {results.discountPercent > 0 && (<div className="flex justify-between items-center text-[#337159]"><span>خصم الكمية ({results.discountPercent}%):</span><span>-{Math.round(results.discountAmount)} ريال</span></div>)}
+                        <div className="border-t border-slate-200 pt-2 flex justify-between items-center"><span className="font-bold text-[#337159] text-lg">السعر النهائي (بعد الخصم):</span><span className="font-black text-3xl text-[#fa5732]">{Math.round(results.priceAfterDiscount || 0)} <span className="text-sm font-medium">ريال</span></span></div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Save Button */}
+                  <div className="mt-6 flex justify-end col-span-full">
+                    <button 
+                      onClick={handleSaveQuote} 
+                      disabled={savingLog || !results.finalPrice}
+                      className="bg-[#fa5732] hover:bg-[#d94a29] text-white py-3 px-8 rounded-xl font-bold shadow-lg flex items-center gap-2 disabled:opacity-50 transition-all hover:scale-105 active:scale-95"
+                    >
+                      <FileText className="w-5 h-5" />
+                      {savingLog ? 'جاري الحفظ...' : 'حفظ التسعيرة'}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
           <div className="text-center text-xs text-slate-400 mt-8">{activeTab === 'digital' ? `السعر المطبق للورق: ${results.sheetPriceUsed} ريال | المقاس: ${results.dims}` : activeTab === 'offset' ? `حساب: ${results.ups} قطع في الورق | الزنكات: ${results.numPlates}` : `الأسعار الأساسية: رول: ${prices.rollUnitPrice} | UV: ${prices.uvDtfPrice}`}</div>
@@ -1357,6 +1408,10 @@ const CalculatorApp = ({ prices, onAdminLogin, currentUser, generalSettings }) =
 };
 
 export default function App() {
+  return <AppContent />;
+}
+
+function AppContent() {
   const [view, setView] = useState('calculator'); // 'calculator', 'login', 'admin'
   const [adminUser, setAdminUser] = useState(null);
   const [loading, setLoading] = useState(true);
