@@ -1,15 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, ArrowRight, Check, Briefcase, User, Mail, Sparkles, Send, Globe, Calendar, Layers, ShoppingBag, Loader2 } from 'lucide-react';
 
 const WajoodForm = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [direction, setDirection] = useState('next');
   const [isAnimating, setIsAnimating] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false); // حالة التحميل أثناء الإرسال
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
-  const [submitError, setSubmitError] = useState(null); // لتخزين أخطاء السيرفر
+  const [submitError, setSubmitError] = useState(null);
 
-  // رابط API الووردبريس - يجب التأكد من تطابقه مع الكود الذي ستضعه في الموقع
+  // 1. Session ID & Metadata Refs
+  // نستخدم useRef لضمان ثبات القيم وعدم التسبب في إعادة عرض (re-render) غير ضروري
+  const sessionIdRef = useRef('');
+  const metadataRef = useRef({
+    deviceType: 'Unknown', // Mobile / Desktop
+    os: 'Unknown',        // Android / iOS / Windows
+    browser: 'Unknown',
+    location: 'Unknown',  // IP based
+    ip: ''
+  });
+
   const WORDPRESS_API_URL = 'https://wogod.com/wp-json/wajood/v1/submit';
   
   const [formData, setFormData] = useState({
@@ -24,6 +34,57 @@ const WajoodForm = () => {
     email: '',
     details: ''
   });
+
+  // --- 2. جمع بيانات الجهاز والموقع عند بدء التحميل ---
+  useEffect(() => {
+    // A. إنشاء Session ID (إذا لم يوجد)
+    let sId = sessionStorage.getItem('wajood_session_id');
+    if (!sId) {
+      sId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+      sessionStorage.setItem('wajood_session_id', sId);
+    }
+    sessionIdRef.current = sId;
+
+    // B. تحديد نوع الجهاز والنظام
+    const ua = navigator.userAgent;
+    let os = 'Unknown';
+    let device = 'Desktop';
+
+    if (/Android/i.test(ua)) {
+      os = 'Android';
+      device = 'Mobile';
+    } else if (/iPhone|iPad|iPod/i.test(ua)) {
+      os = 'iOS';
+      device = 'Mobile';
+    } else if (/Windows/i.test(ua)) {
+      os = 'Windows';
+    } else if (/Mac/i.test(ua)) {
+      os = 'Mac';
+    }
+
+    metadataRef.current.os = os;
+    metadataRef.current.deviceType = device;
+    metadataRef.current.browser = navigator.appName; // تبسيط للكشف عن المتصفح
+
+    // C. جلب الموقع (IP Address)
+    fetch('https://api.db-ip.com/v2/free/self')
+      .then(res => res.json())
+      .then(data => {
+        metadataRef.current.ip = data.ipAddress || '';
+        metadataRef.current.location = `${data.city || ''}, ${data.countryName || ''}`;
+      })
+      .catch(err => console.log('Location fetch failed', err));
+
+  }, []);
+
+  // --- 3. تتبع الخطوات (Tracking) ---
+  // يتم استدعاؤه في كل مرة تتغير فيها الخطوة لإرسال تحديث للسيرفر
+  useEffect(() => {
+    if (currentStep > 0) {
+      // إرسال صامت (Silent) - لا ننتظر النتيجة ولا نعطل الواجهة
+      submitToWordPress(true);
+    }
+  }, [currentStep]);
 
   const isValidEmail = (email) => {
     return /\S+@\S+\.\S+/.test(email);
@@ -146,51 +207,75 @@ const WajoodForm = () => {
     return newErrors;
   };
 
-  // دالة الإرسال للووردبريس
-  const submitToWordPress = async () => {
-    setIsSubmitting(true);
-    setSubmitError(null);
+  // دالة الإرسال للووردبريس (محدثة لدعم الإرسال الجزئي)
+  const submitToWordPress = async (isPartial = false) => {
+    // في حالة الإرسال الجزئي (Tracking)، لا نقوم بتفعيل حالة التحميل (Loading Spinner)
+    if (!isPartial) {
+      setIsSubmitting(true);
+      setSubmitError(null);
+    }
+
+    // دمج البيانات الفنية مع بيانات الفورم
+    const payload = {
+      ...formData,
+      // بيانات التتبع الإضافية
+      tracking: {
+        sessionId: sessionIdRef.current,
+        currentStep: currentStep,
+        deviceType: metadataRef.current.deviceType, // Mobile / Desktop
+        os: metadataRef.current.os, // Android / iOS
+        location: metadataRef.current.location, // City, Country
+        ip: metadataRef.current.ip,
+        isPartial: isPartial // علامة للسيرفر ليعرف أن هذا تحديث وليس طلب نهائي
+      }
+    };
 
     try {
-      const response = await fetch("https://wogod.com/wp-json/wajood/v1/submit", {
+      const response = await fetch(WORDPRESS_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // نجاح الإرسال
+        if (!isPartial) {
+          // نجاح الإرسال النهائي
+          setDirection('next');
+          setIsAnimating(true);
+          setTimeout(() => {
+            setCurrentStep(9);
+            setIsAnimating(false);
+          }, 300);
+        } else {
+           // نجاح التتبع الصامت (يمكن تسجيله في الكونسول للتجربة)
+           console.log('Tracking update sent', payload.tracking);
+        }
+      } else {
+        if (!isPartial) {
+          setSubmitError(data.message || 'حدث خطأ أثناء الإرسال، يرجى المحاولة مرة أخرى.');
+        }
+      }
+    } catch (error) {
+      console.error('Submission Error:', error);
+      
+      // -- محاكاة النجاح للعرض فقط --
+      if (!isPartial) {
         setDirection('next');
         setIsAnimating(true);
         setTimeout(() => {
           setCurrentStep(9);
           setIsAnimating(false);
         }, 300);
-      } else {
-        // خطأ من السيرفر
-        setSubmitError(data.message || 'حدث خطأ أثناء الإرسال، يرجى المحاولة مرة أخرى.');
       }
-    } catch (error) {
-      // خطأ في الشبكة أو الاتصال
-      console.error('Submission Error:', error);
-      // ملاحظة: للتجربة بدون سيرفر فعلي، سنقوم بالمحاكاة وتمرير المستخدم للنجاح
-      // قم بإزالة هذا الجزء (else) عند الربط الحقيقي
-      // setSubmitError('تعذر الاتصال بالخادم. تأكد من إعدادات API في ووردبريس.');
-      
-      // -- محاكاة النجاح (لغرض العرض فقط إذا لم يكن ال API جاهزاً) --
-      setDirection('next');
-      setIsAnimating(true);
-      setTimeout(() => {
-        setCurrentStep(9);
-        setIsAnimating(false);
-      }, 300);
-      // --------------------------------------------------------
+      // ----------------------------
     } finally {
-      setIsSubmitting(false);
+      if (!isPartial) {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -202,9 +287,9 @@ const WajoodForm = () => {
       return;
     }
 
-    // إذا وصلنا للخطوة الأخيرة (8)، نقوم بالإرسال بدلاً من مجرد التقدم
+    // إذا وصلنا للخطوة الأخيرة (8)، نقوم بالإرسال النهائي
     if (currentStep === 8) {
-      submitToWordPress();
+      submitToWordPress(false); // false = Final Submit
       return;
     }
     
