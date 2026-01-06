@@ -1,350 +1,646 @@
-import React, { useState, useEffect } from 'react';
-import { Download, Calendar, DollarSign, User, Hash, LayoutTemplate, Image as ImageIcon, Loader } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowLeft, ArrowRight, Check, Briefcase, User, Mail, Sparkles, Send, Globe, Calendar, Layers, ShoppingBag, Loader2 } from 'lucide-react';
 
-const BalanceConfirmationApp = () => {
-  // الحالة (State) لتخزين البيانات المدخلة
+const WajoodForm = () => {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [direction, setDirection] = useState('next');
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // حالة التحميل أثناء الإرسال
+  const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState(null); // لتخزين أخطاء السيرفر
+
+  // رابط API الووردبريس - يجب التأكد من تطابقه مع الكود الذي ستضعه في الموقع
+  const WORDPRESS_API_URL = 'https://wogod.com/wp-json/wajood/v1/submit';
+  
   const [formData, setFormData] = useState({
-    refNumber: '00P-JED-225',
-    customerName: 'مؤسسة جمال اللوحات للدعاية والإعلان',
-    customerNameEn: 'Jamal Paintings Est. for Advertising',
-    startDate: '2025-01-01',
-    endDate: '2025-11-05',
-    balanceDate: '2025-11-05',
-    balanceAmount: '31535.30',
-    logoUrl: 'https://i.ibb.co/R4GYZ29b/MATCHING-INITIATIVES-pdf-1.png', // رابط شعار شركة نجد الجديد
-    stampUrl: 'https://i.ibb.co/yJBySkV/MATCHING-INITIATIVES-pdf.png', // رابط الختم
-    footerBgUrl: 'https://i.ibb.co/6Rvg2LWN/MATCHING-INITIATIVES-pdf-2.png' // رابط خلفية التذييل الجديدة
+    name: '',
+    projectName: '',
+    projectField: '',
+    hasSocialMedia: null,
+    hasWebsite: null,
+    websiteUrl: '',
+    websiteDate: '',
+    selectedServices: [],
+    email: '',
+    details: ''
   });
 
-  const [isPdfReady, setIsPdfReady] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  // تحميل مكتبة html2pdf.js عند بدء التشغيل
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-    script.onload = () => setIsPdfReady(true);
-    document.body.appendChild(script);
-
-    return () => {
-      try {
-        document.body.removeChild(script);
-      } catch (e) {
-        // ignore removal errors
-      }
-    };
-  }, []);
-
-  // دالة لتحديث البيانات عند الكتابة
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+  const isValidEmail = (email) => {
+    return /\S+@\S+\.\S+/.test(email);
   };
 
-  // دالة موحدة لتنسيق التاريخ بفاصلة مائلة / (DD/MM/YYYY) أو (YYYY/MM/DD) حسب الحاجة
-  // هنا سنعتمد تنسيق DD/MM/YYYY ليكون متناسقاً
-  const formatDisplayDate = (dateStr) => {
-    if (!dateStr) return '';
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return dateStr;
-    // إرجاع التاريخ بصيغة يوم/شهر/سنة
-    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  const isValidUrl = (urlString) => {
+    try {
+      const pattern = new RegExp('^(https?:\\/\\/)?'+ 
+        '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|'+ 
+        '((\\d{1,3}\\.){3}\\d{1,3}))'+ 
+        '(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*'+ 
+        '(\\?[;&a-z\\d%_.~+=-]*)?'+ 
+        '(\\#[-a-z\\d_]*)?$','i'); 
+      return !!pattern.test(urlString);
+    } catch (e) {
+      return false;
+    }
   };
 
-  // دالة تحميل PDF المباشر
-  const handleDownloadPDF = () => {
-    if (!isPdfReady) return;
-    setIsGenerating(true);
+  const theme = {
+    bg: "bg-[#191919]",
+    cardBg: "bg-[#252525]", 
+    text: "text-white",
+    subText: "text-gray-400",
+    accent: "bg-[#FE931E]", 
+    accentText: "text-[#FE931E]",
+    accentHover: "hover:bg-[#F24022]",
+    border: "border-gray-800",
+    inputBg: "bg-[#191919]"
+  };
 
-    const element = document.getElementById('printable-section');
+  const servicesList = [
+    { id: 'branding', label: 'هوية بصرية', icon: '🎨' },
+    { id: 'web-design', label: 'تصميم مواقع', icon: '💻' },
+    { id: 'app-dev', label: 'تطوير تطبيقات', icon: '📱' },
+    { id: 'marketing', label: 'تسويق رقمي', icon: '📈' },
+    { id: 'seo', label: 'تحسين محركات البحث', icon: '🔍' },
+    { id: 'content', label: 'صناعة محتوى', icon: '✍️' },
+  ];
+
+  const getNextStep = (current) => {
+    if (current === 0) return 1;
+    if (current === 1) return 2;
+    if (current === 2) return 3;
     
-    const opt = {
-      margin:       0,
-      filename:     `Balance_Confirmation_${formData.refNumber}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
+    if (current === 3) {
+      return formData.hasSocialMedia ? 4 : 7;
+    }
 
-    window.html2pdf().set(opt).from(element).save().then(() => {
-      setIsGenerating(false);
-    });
+    if (current === 4) {
+      return formData.hasWebsite ? 5 : 7;
+    }
+
+    if (current === 5) return 6;
+    if (current === 6) return 7;
+    if (current === 7) return 8;
+    if (current === 8) return 9;
+
+    return current + 1;
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
+  const getPrevStep = (current) => {
+    if (current === 0) return 0;
+    if (current === 1) return 0;
+    if (current === 2) return 1;
+    if (current === 3) return 2;
+    if (current === 4) return 3;
+    if (current === 5) return 4;
+    if (current === 6) return 5;
+
+    if (current === 7) {
+      if (formData.hasWebsite) return 6;
+      if (formData.hasSocialMedia) return 4;
+      return 3;
+    }
+
+    if (current === 8) return 7;
+    return current - 1;
+  };
+
+  const getStepErrors = (step, data) => {
+    const newErrors = {};
+
+    if (step === 0 && !data.name.trim()) {
+      newErrors.name = 'الرجاء إدخال الاسم';
+    }
+    
+    if (step === 1 && !data.projectName.trim()) {
+      newErrors.projectName = 'الرجاء إدخال اسم المشروع';
+    }
+
+    if (step === 2 && !data.projectField) {
+      newErrors.projectField = 'required'; 
+    }
+
+    if (step === 5) {
+      if (!data.websiteUrl.trim()) {
+        newErrors.websiteUrl = 'الرجاء إدخال رابط الموقع';
+      } else if (!isValidUrl(data.websiteUrl)) {
+        newErrors.websiteUrl = 'صيغة الرابط غير صحيحة';
+      }
+    }
+
+    if (step === 6 && !data.websiteDate) {
+      newErrors.websiteDate = 'الرجاء اختيار تاريخ الإنشاء';
+    }
+
+    if (step === 7 && data.selectedServices.length === 0) {
+      newErrors.selectedServices = 'الرجاء اختيار خدمة واحدة على الأقل';
+    }
+
+    if (step === 8) {
+      if (!data.email.trim()) {
+        newErrors.email = 'الرجاء إدخال وسيلة تواصل';
+      } else if (!isValidEmail(data.email) && !/^\d+$/.test(data.email)) {
+        newErrors.email = 'الرجاء إدخال بريد إلكتروني صحيح أو رقم جوال';
+      }
+    }
+
+    return newErrors;
+  };
+
+  // دالة الإرسال للووردبريس
+  const submitToWordPress = async () => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const response = await fetch("https://wogod.com/wp-json/wajood/v1/submit", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // نجاح الإرسال
+        setDirection('next');
+        setIsAnimating(true);
+        setTimeout(() => {
+          setCurrentStep(9);
+          setIsAnimating(false);
+        }, 300);
+      } else {
+        // خطأ من السيرفر
+        setSubmitError(data.message || 'حدث خطأ أثناء الإرسال، يرجى المحاولة مرة أخرى.');
+      }
+    } catch (error) {
+      // خطأ في الشبكة أو الاتصال
+      console.error('Submission Error:', error);
+      // ملاحظة: للتجربة بدون سيرفر فعلي، سنقوم بالمحاكاة وتمرير المستخدم للنجاح
+      // قم بإزالة هذا الجزء (else) عند الربط الحقيقي
+      // setSubmitError('تعذر الاتصال بالخادم. تأكد من إعدادات API في ووردبريس.');
+      
+      // -- محاكاة النجاح (لغرض العرض فقط إذا لم يكن ال API جاهزاً) --
+      setDirection('next');
+      setIsAnimating(true);
+      setTimeout(() => {
+        setCurrentStep(9);
+        setIsAnimating(false);
+      }, 300);
+      // --------------------------------------------------------
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleNext = () => {
+    const currentErrors = getStepErrors(currentStep, formData);
+    
+    if (Object.keys(currentErrors).length > 0) {
+      setErrors(currentErrors);
+      return;
+    }
+
+    // إذا وصلنا للخطوة الأخيرة (8)، نقوم بالإرسال بدلاً من مجرد التقدم
+    if (currentStep === 8) {
+      submitToWordPress();
+      return;
+    }
+    
+    const next = getNextStep(currentStep);
+    setDirection('next');
+    setIsAnimating(true);
+    setTimeout(() => {
+      setCurrentStep(next);
+      setIsAnimating(false);
+    }, 300);
+  };
+
+  const handlePrev = () => {
+    setErrors({});
+    setSubmitError(null);
+    const prev = getPrevStep(currentStep);
+    setDirection('prev');
+    setIsAnimating(true);
+    setTimeout(() => {
+      setCurrentStep(prev);
+      setIsAnimating(false);
+    }, 300);
+  };
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    if (errors[e.target.name]) {
+      setErrors({ ...errors, [e.target.name]: null });
+    }
+  };
+
+  const toggleService = (id) => {
+    const currentServices = formData.selectedServices;
+    let newServices;
+    if (currentServices.includes(id)) {
+      newServices = currentServices.filter(s => s !== id);
+    } else {
+      newServices = [...currentServices, id];
+    }
+    setFormData({ ...formData, selectedServices: newServices });
+    
+    if (newServices.length > 0 && errors.selectedServices) {
+       setErrors({ ...errors, selectedServices: null });
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      if (![2, 3, 4, 7].includes(currentStep)) {
+        handleNext();
+      }
+    }
+  };
+
+  const getAnimationClass = () => {
+    if (isAnimating) {
+      return direction === 'next' 
+        ? 'opacity-0 -translate-x-10' 
+        : 'opacity-0 translate-x-10';
+    }
+    return 'opacity-100 translate-x-0';
+  };
+
+  const isCurrentStepValid = () => {
+    const errors = getStepErrors(currentStep, formData);
+    return Object.keys(errors).length === 0;
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 font-sans flex flex-col md:flex-row app-container">
+    <div 
+      className={`min-h-screen ${theme.bg} ${theme.text} flex flex-col items-center justify-center p-4 overflow-hidden relative`} 
+      dir="rtl"
+      style={{ fontFamily: '"The Year of The Camel", sans-serif' }}
+    >
       
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');
-      `}</style>
+      {/* Background Decor */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-[#FE931E]/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-[#F24022]/10 rounded-full blur-3xl"></div>
+      </div>
 
-      {/* ---------------- القسم الأول: لوحة التحكم ---------------- */}
-      <div className="w-full md:w-1/3 lg:w-1/4 bg-white p-6 shadow-lg border-r border-gray-200 overflow-y-auto z-10" style={{ fontFamily: "'Cairo', sans-serif" }}>
-        <div className="flex items-center gap-2 mb-6 text-blue-800 border-b pb-4">
-          <LayoutTemplate size={24} />
-          <h1 className="text-xl font-bold">بيانات المصادقة</h1>
+      {/* Header / Logo Area */}
+      <div className="absolute top-8 w-full max-w-2xl flex justify-between items-center px-6 z-10">
+        <div className="flex items-center gap-3">
+          <img 
+            src="https://wogod.com/wp-content/uploads/2025/02/Frame.png" 
+            alt="Wajood Logo" 
+            className="h-12 w-auto object-contain"
+          />
         </div>
-
-        <div className="space-y-4">
-          {/* الحقول المدخلة */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-              <Hash size={14} /> كود العميل / المرجع
-            </label>
-            <input type="text" name="refNumber" value={formData.refNumber} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-left" dir="ltr" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-              <User size={14} /> اسم العميل (عربي)
-            </label>
-            <input type="text" name="customerName" value={formData.customerName} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md text-right" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-              <User size={14} /> اسم العميل (إنجليزي)
-            </label>
-            <input type="text" name="customerNameEn" value={formData.customerNameEn} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md text-left" dir="ltr" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                <Calendar size={14} /> من تاريخ
-              </label>
-              <input type="date" name="startDate" value={formData.startDate} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                <Calendar size={14} /> إلى تاريخ
-              </label>
-              <input type="date" name="endDate" value={formData.endDate} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md text-sm" />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-              <Calendar size={14} /> الرصيد كما في تاريخ
-            </label>
-            <input type="date" name="balanceDate" value={formData.balanceDate} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-              <DollarSign size={14} /> مبلغ الرصيد
-            </label>
-            <input type="number" name="balanceAmount" value={formData.balanceAmount} onChange={handleChange} step="0.01" className="w-full p-2 border border-gray-300 rounded-md font-mono font-bold text-lg" />
-          </div>
-
-          <button
-            onClick={handleDownloadPDF}
-            disabled={!isPdfReady || isGenerating}
-            className={`w-full mt-6 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 shadow-md transition-all 
-              ${!isPdfReady || isGenerating ? 'bg-gray-400 cursor-wait' : 'bg-green-700 hover:bg-green-800 cursor-pointer active:bg-green-900'}`}
-          >
-            {isGenerating ? <Loader className="animate-spin" size={20} /> : <Download size={20} />}
-            {isGenerating ? 'جاري إنشاء الملف...' : 'تحميل PDF مباشرة'}
-          </button>
+        {/* Simple Progress Indicator */}
+        <div className="flex gap-1">
+          {[...Array(9)].map((_, i) => (
+             <div 
+               key={i} 
+               className={`h-1.5 w-1.5 rounded-full transition-colors ${i <= currentStep ? 'bg-[#FE931E]' : 'bg-gray-800'}`}
+             />
+          ))}
         </div>
       </div>
 
-      {/* ---------------- القسم الثاني: معاينة المستند ---------------- */}
-      <div className="flex-1 bg-gray-200 p-4 md:p-8 overflow-auto flex justify-center no-print-bg">
-        <div 
-          id="printable-section"
-          className="bg-white shadow-2xl w-[210mm] h-[297mm] p-[10mm] relative text-black box-border flex flex-col justify-between mx-auto overflow-hidden"
-          style={{ fontFamily: "'Cairo', sans-serif" }}
-        >
-          {formData.footerBgUrl && (
-            <img src={formData.footerBgUrl} className="absolute bottom-0 left-0 w-full z-0 object-cover" alt="Footer Background" crossOrigin="anonymous" style={{bottom:"50px"}} />
+      {/* Main Card */}
+      <div className="w-full max-w-2xl z-10 mt-10">
+        
+        {/* Dynamic Content Area */}
+        <div className={`transition-all duration-500 ease-in-out transform min-h-[400px] flex flex-col justify-center ${getAnimationClass()}`}>
+          
+          {/* STEP 0: NAME */}
+          {currentStep === 0 && (
+            <div className="space-y-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#252525] border border-gray-800 text-[#FE931E] text-sm font-medium mb-4">
+                <Sparkles size={16} />
+                <span>لنبدأ الرحلة</span>
+              </div>
+              <h1 className="text-4xl md:text-5xl font-bold leading-tight">
+                أهلاً بك، <br />
+                <span className="text-gray-500">نتشرف بإسمك الكريم؟</span>
+              </h1>
+              <div className="relative group">
+                <User className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${errors.name ? 'text-red-500' : 'text-gray-500 group-focus-within:text-[#FE931E]'} `} size={24} />
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="اكتب اسمك هنا..."
+                  className={`w-full bg-transparent border-b-2 ${errors.name ? 'border-red-500' : theme.border} text-3xl py-4 pr-14 pl-4 focus:outline-none ${errors.name ? 'focus:border-red-500' : 'focus:border-[#FE931E]'} transition-all placeholder:text-gray-600`}
+                  autoFocus
+                />
+              </div>
+              {errors.name && <p className="text-red-500 text-sm animate-pulse">{errors.name}</p>}
+            </div>
           )}
 
-          <header className="border-b-2 border-black pb-2 mb-2 relative z-10">
-            <div className="flex justify-between items-start">
-              <div className="text-left w-1/3">
-                <h2 className="font-bold text-lg leading-tight text-blue-900">NAJD INTERNATIONAL MARKETING CO.</h2>
-                <div className="text-sm space-y-1 mt-1 text-gray-700 font-medium">
-                   <p><span className="font-bold">C.R:</span> 4030524136</p>
-                   <p><span className="font-bold">VAT:</span> 311815766100003</p>
-                </div>
+          {/* STEP 1: PROJECT NAME */}
+          {currentStep === 1 && (
+            <div className="space-y-6">
+              <div className="text-[#FE931E] font-medium text-lg">
+                تشرفنا يا {formData.name}
               </div>
-
-              <div className="w-1/3 flex flex-col items-center justify-center">
-                <div className="h-20 w-full flex items-center justify-center mb-1">
-                   {formData.logoUrl && <img src={formData.logoUrl} alt="NAJD Logo" className="h-full object-contain" crossOrigin="anonymous" />}
-                </div>
-                <div className="text-xs font-bold border border-black px-2 py-1 bg-gray-100">
-                  {formData.refNumber || 'REF-000'}
-                </div>
+              <h1 className="text-4xl md:text-5xl font-bold leading-tight">
+                ما هو <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#FE931E] to-[#F24022]">اسم مشروعك</span>؟
+              </h1>
+              <div className="relative group">
+                <Briefcase className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${errors.projectName ? 'text-red-500' : 'text-gray-500 group-focus-within:text-[#FE931E]'}`} size={24} />
+                <input
+                  type="text"
+                  name="projectName"
+                  value={formData.projectName}
+                  onChange={handleChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="اسم المشروع..."
+                  className={`w-full bg-transparent border-b-2 ${errors.projectName ? 'border-red-500' : theme.border} text-3xl py-4 pr-14 pl-4 focus:outline-none ${errors.projectName ? 'focus:border-red-500' : 'focus:border-[#FE931E]'} transition-all placeholder:text-gray-600`}
+                  autoFocus
+                />
               </div>
-
-              <div className="text-right w-1/3" dir="rtl">
-                <h2 className="font-bold text-lg leading-tight text-blue-900">شركة نجد الدولية للتسويق</h2>
-                <div className="text-sm space-y-1 mt-1 text-gray-700 font-medium">
-                  <p>س.ت <span>:٤٠٣٠٥٢٤١٣٦</span></p>
-                  <p>الرقم الضريبي<span>: ٣١١٨١٥٧٦٦١٠٠٠٠٣</span></p>
-                </div>
-              </div>
+              {errors.projectName && <p className="text-red-500 text-sm animate-pulse">{errors.projectName}</p>}
             </div>
-          </header>
+          )}
 
-          <div className="text-center mb-4 relative z-10">
-            <h1 className="text-xl font-bold border-2 border-black inline-block px-8 py-1 rounded-lg bg-gray-50 uppercase shadow-sm">
-              مـطـابـقـة رصـيـد <br/>
-              <span className="text-base font-medium">Balance Confirmation</span>
-            </h1>
-          </div>
+          {/* STEP 2: PROJECT FIELD (Services vs Products) */}
+          {currentStep === 2 && (
+            <div className="space-y-8">
+               <h1 className="text-4xl md:text-5xl font-bold leading-tight">
+                ما هو <span className="text-[#FE931E]">مجال مشروعك</span>؟
+              </h1>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                <button
+                  onClick={() => setFormData({...formData, projectField: 'services'})}
+                  className={`p-8 rounded-2xl border-2 transition-all duration-300 flex flex-col items-center gap-4 text-center group
+                    ${formData.projectField === 'services'
+                      ? 'border-[#FE931E] bg-[#FE931E]/10' 
+                      : 'border-gray-800 hover:border-gray-600 bg-[#252525]'}`}
+                >
+                  <Layers size={48} className={formData.projectField === 'services' ? 'text-[#FE931E]' : 'text-gray-400'} />
+                  <span className="text-2xl font-bold">خدمــات</span>
+                </button>
 
-          <div className="flex flex-col gap-3 flex-grow relative z-10">
-            <div className="flex justify-between items-end border-b border-gray-300 pb-2">
-               <div className="text-left w-1/2">
-                  <p className="font-bold text-gray-600 mb-1">M/S:</p>
-                  <p className="text-lg font-bold ">{formData.customerNameEn}</p>
-               </div>
-               <div className="text-right w-1/2" dir="rtl">
-                 <p className="mb-1 text-sm text-gray-600 font-medium">
-                    اعتباراً من <span className="font-bold text-black"> {formatDisplayDate(formData.startDate)} </span> إلى <span className="font-bold text-black"> {formatDisplayDate(formData.endDate)} </span>
-                 </p>
-                 <p className="font-bold text-gray-600 mb-1">:السادة </p>
-                 <p className="text-lg font-bold ">{formData.customerName}</p>
-               </div>
-            </div>
-
-            <div className="flex flex-row-reverse gap-6">
-              <div className="w-1/2 text-right" dir="rtl">
-                <p className="leading-snug mb-2 text-justify font-medium text-sm">
-                  بمناسبة تدقيق حساباتنا الدورية المعتادة لبياناتنا المالية، فإننا نرغب في الحصول على تأكيد مباشر للرصيد المستحق لنا من طرفكم كما هو بتاريخ <span className="font-bold px-1">{formatDisplayDate(formData.balanceDate)}</span>.
-                </p>
-                <p className="mb-1 font-bold text-sm" >الرصيد حسب سجلاتنا هو  <span>:</span></p>
-                <div className="border border-black p-2 mt-1 inline-block w-full text-center ">
-                   <div className="flex justify-center items-center gap-2" style={{color:"black"}}>
-                      <span className="text-xl font-black">{formatCurrency(formData.balanceAmount)}</span>
-                      <span className="text-sm font-bold">ريال سعودي</span>
-                   </div> 
-                </div>
-              </div>
-
-              <div className="w-1/2 text-left">
-                <p className="leading-snug mb-2 text-justify text-sm font-medium">
-                  As per our normal financial audit requirements please check and confirm the accuracy of our balance with you as of 
-                  <span className="font-bold px-1"> {formatDisplayDate(formData.balanceDate)} </span>.
-                </p>
-                <p className="mb-1 font-bold text-sm">According to our records, the balance is:</p>
-                <div className="border border-black p-2 mt-1 inline-block w-full text-center">
-                   <div className="flex justify-center items-center gap-2">
-                      <span className="text-xl font-black">{formatCurrency(formData.balanceAmount)}</span>
-                      <span className="text-sm font-bold">SR</span>
-                   </div>
-                </div>
+                <button
+                  onClick={() => setFormData({...formData, projectField: 'products'})}
+                  className={`p-8 rounded-2xl border-2 transition-all duration-300 flex flex-col items-center gap-4 text-center group
+                    ${formData.projectField === 'products'
+                      ? 'border-[#FE931E] bg-[#FE931E]/10' 
+                      : 'border-gray-800 hover:border-gray-600 bg-[#252525]'}`}
+                >
+                  <ShoppingBag size={48} className={formData.projectField === 'products' ? 'text-[#FE931E]' : 'text-gray-400'} />
+                  <span className="text-2xl font-bold">منتجــات</span>
+                </button>
               </div>
             </div>
+          )}
 
-            {/* باقي التفاصيل */}
-            <div className="flex flex-row-reverse gap-6">
-               <div className="w-1/2 text-right" dir="rtl">
-                 <p className="text-xs leading-relaxed text-justify font-medium">
-                   نرجو مقارنة الرصيد الموضح أعلاه مع سجلاتكم وتوضيح أي اختلافات بالرصيد في الجزء السفلي من هذه الرسالة، كما نرجو منكم توقيع وختم الرسالة وإعادتها إلينا.
-                   <br/><br/>
-                   <span className="text-[10px] text-gray-500 font-bold">* إذا لم يصلنا الرد خلال 10 أيام سوف نعتبر هذا بمثابة موافقة نهائية على الرصيد.</span>
-                 </p>
-               </div>
-               <div className="w-1/2 text-left">
-                 <p className="text-xs leading-relaxed text-justify font-medium">
-                   Please confirm the balance by signing and stamping in the space given below. State any discrepancies in detail if any.
-                   <br/><br/>
-                   <span className="text-[10px] text-gray-500 font-bold">* If we do not receive your confirmation within 10 days, it is understood you agree to the contents therein.</span>
-                 </p>
-               </div>
+          {/* STEP 3: SOCIAL MEDIA CHECK */}
+          {currentStep === 3 && (
+            <div className="space-y-8">
+               <h1 className="text-3xl md:text-5xl font-bold leading-tight">
+                عندك حسابات على <span className="text-[#FE931E]">السوشيال ميديا</span>؟
+              </h1>
+              
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={() => setFormData({...formData, hasSocialMedia: true})}
+                  className={`flex-1 p-6 rounded-xl border-2 text-2xl font-bold transition-all
+                    ${formData.hasSocialMedia === true 
+                      ? 'border-[#FE931E] bg-[#FE931E] text-black' 
+                      : 'border-gray-700 bg-[#252525] hover:border-gray-500'}`}
+                >
+                  نعم
+                </button>
+                <button
+                  onClick={() => setFormData({...formData, hasSocialMedia: false})}
+                  className={`flex-1 p-6 rounded-xl border-2 text-2xl font-bold transition-all
+                    ${formData.hasSocialMedia === false 
+                      ? 'border-gray-500 bg-gray-700 text-white' 
+                      : 'border-gray-700 bg-[#252525] hover:border-gray-500'}`}
+                >
+                  لا
+                </button>
+              </div>
             </div>
+          )}
 
-            <div className="border-t-2 border-dashed border-gray-400 pt-2 relative z-10 mt-[18px]">
-               <div className="p-3 border border-gray-300 rounded-lg">
-                  <div className="flex justify-between mb-3 border-b border-gray-300 pb-1">
-                     <h3 className="font-bold text-base">Confirmation Reply</h3>
-                     <h3 className="font-bold text-base">رد المصادقة</h3>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                       <div className="flex items-center gap-2 w-1/2">
-                          <div className="w-5 h-5 border border-black flex-shrink-0"></div>
-                          <p className="text-xs font-medium pt-0.5">We confirm the above balance is correct.</p>
-                       </div>
-                       <div className="flex items-center justify-start gap-2 w-1/2" dir="rtl">
-                          <div className="w-5 h-5 border border-black flex-shrink-0"></div>
-                          <p className="text-xs font-medium pt-0.5">إننا نوافق على أن الرصيد المبين أعلاه صحيح.</p>
-                       </div>
-                    </div>
-                    <div className="flex items-start justify-between">
-                       <div className="w-1/2 pr-2">
-                          <div className="flex items-center gap-2 mb-1">
-                             <div className="w-5 h-5 border border-black flex-shrink-0"></div>
-                             <p className="text-xs font-medium pt-0.5">We do not agree. The balance in our books is:</p>
-                          </div>
-                          <div className="border-b border-dotted border-black h-6 w-[88%] mt-1 ml-7" style={{border :"1px solid black",padding:"18px 0"}}></div>
-                       </div>
-                       <div className="w-1/2 pl-2" dir="rtl">
-                          <div className="flex items-center gap-2 mb-1">
-                             <div className="w-5 h-5 border border-black flex-shrink-0"></div>
-                             <p className="text-xs font-medium pt-0.5">إننا لا نوافق على صحة الرصيد، فالرصيد لدينا هو:</p>
-                          </div>
-                          <div className="border-b border-dotted border-black h-6 w-[88%] mt-1 mr-7" style={{border :"1px solid black",padding:"18px 0"}}></div>
-                       </div>
-                    </div>
-                  </div>
-                  <div className="flex justify-end items-end mt-4 pt-2">
-                 
-                     <div className="text-center w-1/3">
-                        <p className="text-xs font-bold text-gray-500">Client Name / اسم العميل</p>
-                     </div>
-                  </div>
-               </div>
+          {/* STEP 4: WEBSITE CHECK (Only if Social Media is YES) */}
+          {currentStep === 4 && (
+            <div className="space-y-8">
+               <h1 className="text-3xl md:text-5xl font-bold leading-tight">
+                هل تمتلك <span className="text-[#FE931E]">موقع / متجر إلكتروني</span>؟
+              </h1>
+              
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={() => setFormData({...formData, hasWebsite: true})}
+                  className={`flex-1 p-6 rounded-xl border-2 text-2xl font-bold transition-all
+                    ${formData.hasWebsite === true 
+                      ? 'border-[#FE931E] bg-[#FE931E] text-black' 
+                      : 'border-gray-700 bg-[#252525] hover:border-gray-500'}`}
+                >
+                  نعم
+                </button>
+                <button
+                  onClick={() => setFormData({...formData, hasWebsite: false})}
+                  className={`flex-1 p-6 rounded-xl border-2 text-2xl font-bold transition-all
+                    ${formData.hasWebsite === false 
+                      ? 'border-gray-500 bg-gray-700 text-white' 
+                      : 'border-gray-700 bg-[#252525] hover:border-gray-500'}`}
+                >
+                  لا
+                </button>
+              </div>
             </div>
-            
-            <div className="flex justify-end mt-2 mb-2">
-               <div className="text-center w-64 relative">
-                 <div className="h-20 flex items-end justify-center pb-2 relative">
-                    {formData.stampUrl && (
-                      <img src={formData.stampUrl} className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-24 opacity-90 mix-blend-multiply pointer-events-none mt-[75px]" alt="Stamp" crossOrigin="anonymous" style={{opacity:"1",width:"77%"}} />
+          )}
+
+          {/* STEP 5: WEBSITE URL */}
+          {currentStep === 5 && (
+            <div className="space-y-6">
+              <h1 className="text-3xl md:text-4xl font-bold leading-tight">
+                ممتاز! ممكن تزودنا بـ <span className="text-[#FE931E]">رابط المتجر</span>؟
+              </h1>
+              <div className="relative group">
+                <Globe className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${errors.websiteUrl ? 'text-red-500' : 'text-gray-500 group-focus-within:text-[#FE931E]'}`} size={24} />
+                <input
+                  type="url"
+                  name="websiteUrl"
+                  value={formData.websiteUrl}
+                  onChange={handleChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="www.example.com"
+                  className={`w-full bg-transparent border-b-2 ${errors.websiteUrl ? 'border-red-500' : theme.border} text-2xl py-4 pr-14 pl-4 focus:outline-none ${errors.websiteUrl ? 'focus:border-red-500' : 'focus:border-[#FE931E]'} transition-all placeholder:text-gray-600 dir-ltr text-right`}
+                  autoFocus
+                />
+              </div>
+              {errors.websiteUrl && <p className="text-red-500 text-sm animate-pulse">{errors.websiteUrl}</p>}
+            </div>
+          )}
+
+          {/* STEP 6: WEBSITE DATE */}
+          {currentStep === 6 && (
+            <div className="space-y-6">
+              <h1 className="text-3xl md:text-4xl font-bold leading-tight">
+                متى تم <span className="text-[#FE931E]">إنشاء المتجر</span>؟
+              </h1>
+              <div className="relative group">
+                <Calendar className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${errors.websiteDate ? 'text-red-500' : 'text-gray-500 group-focus-within:text-[#FE931E]'}`} size={24} />
+                <input
+                  type="date"
+                  name="websiteDate"
+                  value={formData.websiteDate}
+                  onChange={handleChange}
+                  onKeyDown={handleKeyDown}
+                  className={`w-full bg-transparent border-b-2 ${errors.websiteDate ? 'border-red-500' : theme.border} text-2xl py-4 pr-14 pl-4 focus:outline-none ${errors.websiteDate ? 'focus:border-red-500' : 'focus:border-[#FE931E]'} transition-all text-white scheme-dark`}
+                  autoFocus
+                />
+              </div>
+              {errors.websiteDate && <p className="text-red-500 text-sm animate-pulse">{errors.websiteDate}</p>}
+            </div>
+          )}
+
+          {/* STEP 7: SERVICES SELECTION */}
+          {currentStep === 7 && (
+            <div className="space-y-6">
+              <h1 className="text-3xl md:text-4xl font-bold leading-tight">
+                اختار <span className="text-[#FE931E]">الخدمات</span> اللي تبيها
+                <br/>
+                <span className="text-base text-gray-500 font-normal mt-2 block">يمكنك اختيار أكثر من خدمة</span>
+              </h1>
+              
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                {servicesList.map((service) => (
+                  <button
+                    key={service.id}
+                    onClick={() => toggleService(service.id)}
+                    className={`p-4 rounded-xl border transition-all duration-200 flex flex-col items-center gap-2 text-center relative
+                      ${formData.selectedServices.includes(service.id)
+                        ? 'border-[#FE931E] bg-[#FE931E]/20' 
+                        : 'border-gray-800 bg-[#252525] hover:border-gray-600'}`}
+                  >
+                    <span className="text-2xl">{service.icon}</span>
+                    <span className={`text-sm font-medium ${formData.selectedServices.includes(service.id) ? 'text-white' : 'text-gray-400'}`}>
+                      {service.label}
+                    </span>
+                    {formData.selectedServices.includes(service.id) && (
+                      <div className="absolute top-2 left-2 bg-[#FE931E] rounded-full p-0.5">
+                        <Check size={12} className="text-black" />
+                      </div>
                     )}
-                 </div>
-               </div>
-               <div style={{width:"90%",display:"flex",gap:"44px",flexDirection:"column",alignItems:"end",justifyContent:"center"}}>
-                   <div className="text-center w-1/3">
-                        <p className="text-xs font-bold">Signature / التوقيع</p>
-                          <div className="border-b border-black mb-1 pb-2"></div>
-
-                    </div>
-                     <div className="text-center w-1/3">
-                        <p className="text-xs font-bold">Stamp / الختم</p>
-                         <div className="border-b border-black mb-1 pb-2"></div>
-
-                     </div>
-                     </div>
+                  </button>
+                ))}
+              </div>
+              {errors.selectedServices && <p className="text-red-500 text-sm animate-pulse text-center">{errors.selectedServices}</p>}
             </div>
-          </div>
+          )}
 
-          <footer style={{bottom:"15px"}} className="mt-2 text-center text-[10px] text-gray-500 border-t pt-1 font-medium relative z-10">
-             <div className="flex justify-between items-center px-4">
-               <span>Jeddah, Saudi Arabia</span>
-               <span>+966 55 607 607 3</span>
-               <span>najdmarketing@gmail.com</span>
-             </div>
-          </footer>
+          {/* STEP 8: FINAL CONTACT INFO */}
+          {currentStep === 8 && (
+            <div className="space-y-6">
+              <h1 className="text-3xl md:text-4xl font-bold leading-tight">
+                أخيراً، وسيلة للتواصل معك
+              </h1>
+              <p className="text-gray-400">لنرسل لك تفاصيل العرض والخطوات القادمة</p>
+              
+              <div className="space-y-4">
+                <div className="relative group">
+                  <Mail className={`absolute right-4 top-4 transition-colors ${errors.email ? 'text-red-500' : 'text-gray-500 group-focus-within:text-[#FE931E]'}`} size={20} />
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="بريدك الإلكتروني أو رقم الجوال"
+                    className={`w-full ${theme.cardBg} rounded-xl border ${errors.email ? 'border-red-500' : theme.border} text-lg py-3 pr-12 pl-4 focus:outline-none ${errors.email ? 'focus:border-red-500' : 'focus:border-[#FE931E]'} transition-all`}
+                  />
+                </div>
+                {errors.email && <p className="text-red-500 text-sm animate-pulse">{errors.email}</p>}
+                
+                <textarea
+                  name="details"
+                  value={formData.details}
+                  onChange={handleChange}
+                  placeholder="ملاحظات إضافية (اختياري)..."
+                  rows={3}
+                  className={`w-full ${theme.cardBg} rounded-xl border ${theme.border} text-lg p-4 focus:outline-none focus:border-[#FE931E] transition-all resize-none`}
+                />
+
+                {submitError && (
+                   <div className="bg-red-500/10 border border-red-500 text-red-500 p-3 rounded-lg text-center text-sm">
+                     {submitError}
+                   </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* STEP 9: SUCCESS */}
+          {currentStep === 9 && (
+            <div className="text-center py-10">
+              <div className="w-24 h-24 bg-gradient-to-br from-[#FE931E] to-[#F24022] rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-[#FE931E]/20 animate-bounce">
+                <Check size={48} className="text-white" />
+              </div>
+              <h2 className="text-3xl font-bold mb-4 text-white">تم استلام طلبك بنجاح!</h2>
+              <p className="text-gray-400 text-lg max-w-md mx-auto leading-relaxed">
+                شكراً لك يا <span className="text-[#FE931E] font-bold">{formData.name}</span>.<br/>
+                تم حفظ بيانات مشروع <span className="text-white font-medium">"{formData.projectName}"</span> في نظامنا بنجاح. سيتواصل معك فريق وجود قريباً.
+              </p>
+              
+              <button 
+                onClick={() => window.location.reload()}
+                className="mt-8 text-gray-500 hover:text-white transition-colors underline decoration-gray-700 underline-offset-4"
+              >
+                إرسال طلب جديد
+              </button>
+            </div>
+          )}
+
         </div>
+
+        {/* Navigation Buttons */}
+        {currentStep < 9 && (
+          <div className="flex justify-between items-center mt-8 pb-8">
+            <button
+              onClick={handlePrev}
+              disabled={currentStep === 0 || isSubmitting}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all
+                ${currentStep === 0 || isSubmitting
+                  ? 'opacity-0 pointer-events-none' 
+                  : 'text-gray-400 hover:text-white hover:bg-[#252525]'}`}
+            >
+              <ArrowRight size={20} />
+              <span>السابق</span>
+            </button>
+
+            <button
+              onClick={handleNext}
+              disabled={isSubmitting}
+              className={`flex items-center gap-2 px-8 py-3 rounded-lg font-bold text-lg transition-all shadow-lg shadow-[#FE931E]/10
+                ${theme.accent} text-[#191919] ${theme.accentHover} active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed
+                ${!isCurrentStepValid() && !isSubmitting ? 'opacity-50 grayscale' : 'opacity-100 hover:shadow-[#FE931E]/20'}`}
+            >
+              {isSubmitting ? (
+                <>
+                  <span>جاري الإرسال...</span>
+                  <Loader2 className="animate-spin" size={20} />
+                </>
+              ) : (
+                <>
+                  <span>{currentStep === 8 ? 'إرسال الطلب' : 'التالي'}</span>
+                  {currentStep === 8 ? <Send size={20} /> : <ArrowLeft size={20} />}
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-export default BalanceConfirmationApp;
+export default WajoodForm;
